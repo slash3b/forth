@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <ctype.h>
 
 // ------------------------- Data structures
 
@@ -81,7 +82,7 @@ obj *makebool(int i) {
     return res;
 }
 
-// list 
+// list
 
 obj *makelist() {
     obj *res = createobj(OBJ_LIST);
@@ -93,7 +94,9 @@ obj *makelist() {
 }
 
 void listPush(obj * o, obj * o2) {
-
+    o->list.elements = realloc(o->list.elements, sizeof(o) * o->list.len);
+    o->list.elements[o->list.len] = o2;
+    o->list.len++;
 }
 
 // symbol is our function symbol
@@ -106,8 +109,8 @@ obj *makesymbol() {
 }
 
 void parseSpaces(parser *par) {
-    while ( isspace(parser.p) ) {
-        parser.p++;
+    while ( isspace(par->p) ) {
+        par->p++;
     }
 }
 
@@ -120,15 +123,15 @@ obj * compile(char * prg) {
 
     obj * parsed = makelist();
 
-    while (par.p) {
+    while (par->p) {
         obj *o;
-        char * token_start = par.p;
+        char * token_start = par->p;
 
         parseSpaces(par);
 
-        if (par.p == 0) { break; }
+        if (par->p == 0) { break; }
 
-        if (isdigit(par.p[0]) || par.p == '-') {
+        if (isdigit(par->p[0]) || par->p[0] == '-') {
             // is number
         } else {
             o = NULL;
