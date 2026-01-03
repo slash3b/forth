@@ -176,6 +176,11 @@ obj * compile(char * prg) {
 // ------------------------- execution
 
 void exec(obj *prg) {
+    if (prg->type != OBJ_LIST) {
+        printf("expected OBJ_LIST type, got %d", prg->type);
+
+        return;
+    }
 
     for (size_t j = 0; j < prg->list.len; j++) {
         obj *o = prg->list.elements[j];
