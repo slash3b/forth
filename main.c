@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <string.h>
 
 // ------------------------- Data structures
 
@@ -94,7 +95,7 @@ obj *makelist() {
 }
 
 void listPush(obj * o, obj * o2) {
-    o->list.elements = realloc(o->list.elements, sizeof(o) * o->list.len);
+    o->list.elements = realloc(o->list.elements, sizeof(obj*) * (o->list.len + 1));
     o->list.elements[o->list.len] = o2;
     o->list.len++;
 }
@@ -109,9 +110,32 @@ obj *makesymbol() {
 }
 
 void parseSpaces(parser *par) {
-    while ( isspace(par->p) ) {
+    while ( isspace(*par->p) ) {
         par->p++;
     }
+}
+
+#define MAX_NUM_LEN 128
+obj *parseNumber(parser *par) {
+    char buf[MAX_NUM_LEN];
+    char *start = par->p;
+    char *end;
+
+    if (par->p[0] == '-') par->p++;
+    while (par->p[0] && isdigit(par->p[0])) {
+        par->p++;
+    }
+    end = par->p;
+    int numlen = end - start;
+    if (end - start > MAX_NUM_LEN) {
+        return NULL;
+    }
+
+    memcpy(buf, start, numlen);
+    buf[numlen] = 0; // explicitly set to 0
+
+
+    return makeint(atoi(buf));
 }
 
 // compile
@@ -132,7 +156,7 @@ obj * compile(char * prg) {
         if (par->p == 0) { break; }
 
         if (isdigit(par->p[0]) || par->p[0] == '-') {
-            // is number
+            o = parseNumber(par);
         } else {
             o = NULL;
         }
@@ -146,7 +170,11 @@ obj * compile(char * prg) {
         }
     }
 
-    return NULL;
+    return parsed;
+}
+
+void exec(obj * prg) {
+
 }
 
 
@@ -184,11 +212,13 @@ int main(int argc, char *argv[]) {
     printf("read byte %lu\n", bytesread);
     prg_text[len] = 0; // explicit null termination (?)
     fclose(fp);
+    // done reading a file!
 
     printf("printing file contents...\n");
     printf("%s\n", prg_text);
 
-    // done reading a file!
+    obj *prg = compile(prg_text);
+    exec(prg);
 
     return 0;
 }
