@@ -153,7 +153,7 @@ obj * compile(char * prg) {
 
         parseSpaces(par);
 
-        if (par->p == 0) { break; }
+        if (*par->p == 0) { break; }
 
         if (isdigit(par->p[0]) || par->p[0] == '-') {
             o = parseNumber(par);
@@ -173,8 +173,25 @@ obj * compile(char * prg) {
     return parsed;
 }
 
-void exec(obj * prg) {
+// ------------------------- execution
 
+void exec(obj *prg) {
+
+    for (size_t j = 0; j < prg->list.len; j++) {
+        obj *o = prg->list.elements[j];
+        switch (o->type) {
+            case OBJ_INT:
+                printf("%d", o->i);
+                break;
+            default:
+                printf("?");
+                break;
+        }
+
+        printf(" ");
+    }
+
+    printf("\n");
 }
 
 
