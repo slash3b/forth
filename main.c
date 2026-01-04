@@ -72,8 +72,11 @@ obj *makeint(int i) {
 obj *makestring(char *p, int len) {
 	obj *res = createobj(OBJ_STR);
 
-	res->str.ptr = p;
+	res->str.ptr = xmalloc(len + 1);
 	res->str.len = len;
+
+	memcpy(res->str.ptr, p, len);
+	res->str.ptr[len] = 0;
 
 	return res;
 }
@@ -104,10 +107,14 @@ void listPush(obj *o, obj *o2) {
 }
 
 // symbol is our function symbol
-obj *makesymbol() {
-	obj *res = createobj(OBJ_STR);
+obj *makesymbol(char *p, int len) {
+	obj *res = createobj(OBJ_SYMBOL);
 
-	res->type = OBJ_SYMBOL;
+	res->str.ptr = xmalloc(len + 1);
+	res->str.len = len;
+
+	memcpy(res->str.ptr, p, len);
+	res->str.ptr[len] = 0;
 
 	return res;
 }
@@ -147,6 +154,32 @@ obj *parseNumber(parser *par) {
 	return makeint(atoi(buf));
 }
 
+int issymbolchar(int c) {
+	char symbols[] = "+-/*%";
+
+	if (isalpha(c)) {
+		return 1;
+	}
+
+	if (strchr(symbols, c) != NULL) {
+		return 1;
+	}
+
+	return 0;
+}
+
+obj *parseSymbol(parser *par) {
+	char *start = par->p;
+
+	while (par->p[0] && issymbolchar(par->p[0])) {
+		par->p++;
+	}
+
+	int len = par->p - start;
+
+	return makesymbol(start, len);
+}
+
 // compile
 
 obj *compile(char *prg) {
@@ -166,10 +199,13 @@ obj *compile(char *prg) {
 			break;
 		}
 
-		if (isdigit(par->p[0]) || par->p[0] == '-') {
+		if (isdigit(par->p[0]) ||
+		    (par->p[0] == '-' && par->p[1] != '\0' && isdigit(par->p[1]))) {
 			o = parseNumber(par);
-		} else {
-			o = NULL;
+		}
+
+		if (issymbolchar(par->p[0])) {
+			o = parseSymbol(par);
 		}
 
 		if (o == NULL) {
@@ -188,6 +224,10 @@ obj *compile(char *prg) {
 
 void print_object(obj *o) {
 	switch (o->type) {
+	case OBJ_SYMBOL:
+		printf("%s", o->str.ptr);
+
+		break;
 	case OBJ_INT:
 		printf("%d", o->i);
 
@@ -276,7 +316,6 @@ int main(int argc, char *argv[]) {
 	}
 
 	char *prg_text = filegetcontents(argv[argidx]);
-
 	obj *prg = compile(prg_text); // basically a tokenize step.
 	print_object(prg);
 
