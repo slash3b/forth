@@ -122,19 +122,25 @@ obj *parseNumber(parser *par) {
   char *start = par->p;
   char *end;
 
-  if (par->p[0] == '-')
+  if (par->p[0] == '-') {
     par->p++;
-  while (par->p[0] && isdigit(par->p[0])) {
-    par->p++;
-  }
-  end = par->p;
-  int numlen = end - start;
-  if (end - start > MAX_NUM_LEN) {
-    return NULL;
   }
 
+  while (par->p[0] && isdigit(par->p[0])) {
+    par->p++;
+    end = par->p;
+
+    if (end - start >= MAX_NUM_LEN) {
+      return NULL;
+    }
+  }
+
+  int numlen = end - start;
+
   memcpy(buf, start, numlen);
-  buf[numlen] = 0; // explicitly set to 0
+
+  // explicitly set to 0 since atoi expects null terminated buffer
+  buf[numlen] = 0;
 
   return makeint(atoi(buf));
 }
@@ -240,7 +246,7 @@ int main(int argc, char *argv[]) {
   printf("printing file contents...\n");
   printf("%s\n", prg_text);
 
-  obj *prg = compile(prg_text);
+  obj *prg = compile(prg_text); // basically a tokenize step.
   exec(prg);
 
   return 0;
