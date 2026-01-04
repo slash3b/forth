@@ -212,6 +212,45 @@ void print_object(obj *o) {
 	}
 }
 
+char *filegetcontents(char *pathname) {
+	if (debug) {
+		fprintf(stdout, "debug: reading file: %s...\n", pathname);
+	}
+
+	FILE *fp = fopen(pathname, "r");
+	if (fp == NULL) {
+		fprintf(stderr, "unable to open file %s\n", pathname);
+
+		exit(1);
+	}
+
+	fseek(fp, 0, SEEK_END);
+	int len = ftell(fp);
+
+	if (debug) {
+		fprintf(stdout, "debug: file length is %d\n", len);
+	}
+
+	char *prg_text = xmalloc(len + 1); // +1 so we have a null byte in the end.
+
+	rewind(fp);
+	size_t bytesread = fread(prg_text, 1, len, fp);
+	if (debug) {
+		printf("debug: read byte %lu\n", bytesread);
+	}
+
+	prg_text[len] = 0; // explicit null termination (?), yes
+	fclose(fp);
+	// done reading a file!
+
+	if (debug) {
+		fprintf(stdout, "debug: printing file contents...\n");
+		fprintf(stdout, "debug: %s\n", prg_text);
+	}
+
+	return prg_text;
+}
+
 // ------------------------- Main
 
 // argc argument count
@@ -236,40 +275,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	// read program into memory for parsing
-	if (debug) {
-		fprintf(stdout, "debug: reading file: %s...\n", argv[argidx]);
-	}
-
-	FILE *fp = fopen(argv[argidx], "r");
-	if (fp == NULL) {
-		fprintf(stderr, "unable to open file %s\n", argv[argidx]);
-
-		exit(1);
-	}
-
-	fseek(fp, 0, SEEK_END);
-	int len = ftell(fp);
-
-	if (debug) {
-		fprintf(stdout, "debug: file length is %d\n", len);
-	}
-
-	char *prg_text = xmalloc(len + 1); // +1 so we have a null byte in the end.
-
-	rewind(fp);
-	size_t bytesread = fread(prg_text, 1, len, fp);
-	if (debug) {
-		printf("debug: read byte %lu\n", bytesread);
-	}
-	prg_text[len] = 0; // explicit null termination (?)
-	fclose(fp);
-	// done reading a file!
-
-	if (debug) {
-		fprintf(stdout, "debug: printing file contents...\n");
-		fprintf(stdout, "debug: %s\n", prg_text);
-	}
+	char *prg_text = filegetcontents(argv[argidx]);
 
 	obj *prg = compile(prg_text); // basically a tokenize step.
 	print_object(prg);
