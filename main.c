@@ -13,199 +13,202 @@
 #define OBJ_SYMBOL 5
 
 typedef struct obj {
-  int refcount;
-  int type; // OBJ_*
-  union {
-    int i;
-    struct {
-      char *ptr;
-      size_t len;
-    } str;
-    struct {
-      struct obj **elements;
-      size_t len;
-    } list;
-  };
+	int refcount;
+	int type; // OBJ_*
+	union {
+		int i;
+		struct {
+			char *ptr;
+			size_t len;
+		} str;
+		struct {
+			struct obj **elements;
+			size_t len;
+		} list;
+	};
 } obj;
 
 typedef struct parser {
-  char *prg; // entire program
-  char *p;   // next token to parse
+	char *prg; // entire program
+	char *p; // next token to parse
 } parser;
 
 // execution context
 typedef struct ctx {
-  obj *stack;
+	obj *stack;
 } ctx;
 
 // ------------------------- allocation wrappers
 
 void *xmalloc(size_t size) {
-  void *res = malloc(size);
-  if (res == NULL) {
-    fprintf(stderr, "unable to allocate %zu bytes of memory", size);
-    exit(1);
-  }
+	void *res = malloc(size);
+	if (res == NULL) {
+		fprintf(stderr, "unable to allocate %zu bytes of memory", size);
+		exit(1);
+	}
 
-  return res;
+	return res;
 }
 
 // ------------------------- DS functions
 
 obj *createobj(int t) {
-  obj *o = xmalloc(sizeof(obj));
-  o->type = t;
-  o->refcount = 1;
+	obj *o = xmalloc(sizeof(obj));
+	o->type = t;
+	o->refcount = 1;
 
-  return o;
+	return o;
 }
 
 obj *makeint(int i) {
-  obj *res = createobj(OBJ_INT);
-  res->i = i;
+	obj *res = createobj(OBJ_INT);
+	res->i = i;
 
-  return res;
+	return res;
 }
 
 obj *makestring(char *p, int len) {
-  obj *res = createobj(OBJ_STR);
+	obj *res = createobj(OBJ_STR);
 
-  res->str.ptr = p;
-  res->str.len = len;
+	res->str.ptr = p;
+	res->str.len = len;
 
-  return res;
+	return res;
 }
 
 obj *makebool(int i) {
-  obj *res = createobj(OBJ_BOOL);
-  res->i = i;
+	obj *res = createobj(OBJ_BOOL);
+	res->i = i;
 
-  return res;
+	return res;
 }
 
 // list
 
 obj *makelist() {
-  obj *res = createobj(OBJ_LIST);
+	obj *res = createobj(OBJ_LIST);
 
-  res->list.elements = NULL;
-  res->list.len = 0;
+	res->list.elements = NULL;
+	res->list.len = 0;
 
-  return res;
+	return res;
 }
 
 void listPush(obj *o, obj *o2) {
-  o->list.elements =
-      realloc(o->list.elements, sizeof(obj *) * (o->list.len + 1));
-  o->list.elements[o->list.len] = o2;
-  o->list.len++;
+	o->list.elements =
+	    realloc(o->list.elements, sizeof(obj *) * (o->list.len + 1));
+	o->list.elements[o->list.len] = o2;
+	o->list.len++;
 }
 
 // symbol is our function symbol
 obj *makesymbol() {
-  obj *res = createobj(OBJ_STR);
+	obj *res = createobj(OBJ_STR);
 
-  res->type = OBJ_SYMBOL;
+	res->type = OBJ_SYMBOL;
 
-  return res;
+	return res;
 }
 
 void parseSpaces(parser *par) {
-  while (isspace(*par->p)) {
-    par->p++;
-  }
+	while (isspace(*par->p)) {
+		par->p++;
+	}
 }
 
 #define MAX_NUM_LEN 128
 obj *parseNumber(parser *par) {
-  char buf[MAX_NUM_LEN];
-  char *start = par->p;
-  char *end;
+	char buf[MAX_NUM_LEN];
+	char *start = par->p;
+	char *end;
 
-  if (par->p[0] == '-') {
-    par->p++;
-  }
+	if (par->p[0] == '-') {
+		par->p++;
+	}
 
-  while (par->p[0] && isdigit(par->p[0])) {
-    par->p++;
-    end = par->p;
+	while (par->p[0] && isdigit(par->p[0])) {
+		par->p++;
+		end = par->p;
 
-    if (end - start >= MAX_NUM_LEN) {
-      return NULL;
-    }
-  }
+		if (end - start >= MAX_NUM_LEN) {
+			return NULL;
+		}
+	}
 
-  int numlen = end - start;
+	int numlen = end - start;
 
-  memcpy(buf, start, numlen);
+	memcpy(buf, start, numlen);
 
-  // explicitly set to 0 since atoi expects null terminated buffer
-  buf[numlen] = 0;
+	// explicitly set to 0 since atoi expects null terminated buffer
+	buf[numlen] = 0;
 
-  return makeint(atoi(buf));
+	return makeint(atoi(buf));
 }
 
 // compile
 
 obj *compile(char *prg) {
-  parser *par = xmalloc(sizeof(parser));
-  par->prg = prg;
-  par->p = prg;
+	parser *par = xmalloc(sizeof(parser));
+	par->prg = prg;
+	par->p = prg;
 
-  obj *parsed = makelist();
+	obj *parsed = makelist();
 
-  while (par->p) {
-    obj *o;
-    char *token_start = par->p;
+	while (par->p) {
+		obj *o;
+		char *token_start = par->p;
 
-    parseSpaces(par);
+		parseSpaces(par);
 
-    if (*par->p == 0) {
-      break;
-    }
+		if (*par->p == 0) {
+			break;
+		}
 
-    if (isdigit(par->p[0]) || par->p[0] == '-') {
-      o = parseNumber(par);
-    } else {
-      o = NULL;
-    }
+		if (isdigit(par->p[0]) || par->p[0] == '-') {
+			o = parseNumber(par);
+		} else {
+			o = NULL;
+		}
 
-    if (o == NULL) {
-      printf("unexpected token %10s ...\n", token_start);
+		if (o == NULL) {
+			printf("unexpected token %10s ...\n", token_start);
 
-      return NULL;
-    } else {
-      listPush(parsed, o);
-    }
-  }
+			return NULL;
+		} else {
+			listPush(parsed, o);
+		}
+	}
 
-  return parsed;
+	return parsed;
 }
 
 // ------------------------- execution
 
-void exec(obj *prg) {
-  if (prg->type != OBJ_LIST) {
-    printf("expected OBJ_LIST type, got %d", prg->type);
+void print_object(obj *prg) {
+	switch (prg->type) {
+	case OBJ_LIST:
+		//
+		break;
+	default:
+		printf("unexpected object type, got %d", prg->type);
+		return;
+	}
 
-    return;
-  }
+	for (size_t j = 0; j < prg->list.len; j++) {
+		obj *o = prg->list.elements[j];
+		switch (o->type) {
+		case OBJ_INT:
+			printf("%d", o->i);
+			break;
+		default:
+			printf("?");
+			break;
+		}
 
-  for (size_t j = 0; j < prg->list.len; j++) {
-    obj *o = prg->list.elements[j];
-    switch (o->type) {
-    case OBJ_INT:
-      printf("%d", o->i);
-      break;
-    default:
-      printf("?");
-      break;
-    }
+		printf(" ");
+	}
 
-    printf(" ");
-  }
-
-  printf("\n");
+	printf("\n");
 }
 
 // ------------------------- Main
@@ -214,40 +217,40 @@ void exec(obj *prg) {
 // argv argument vector
 
 int main(int argc, char *argv[]) {
-  if (argc < 2) {
-    fprintf(stderr, "usage: %s <filename>\n", argv[0]);
+	if (argc < 2) {
+		fprintf(stderr, "usage: %s <filename>\n", argv[0]);
 
-    return 1;
-  }
+		return 1;
+	}
 
-  // read program into memory for parsing
-  printf("reading file: %s...\n", argv[1]);
+	// read program into memory for parsing
+	printf("reading file: %s...\n", argv[1]);
 
-  FILE *fp = fopen(argv[1], "r");
-  if (fp == NULL) {
-    fprintf(stderr, "unable to open file %s\n", argv[1]);
+	FILE *fp = fopen(argv[1], "r");
+	if (fp == NULL) {
+		fprintf(stderr, "unable to open file %s\n", argv[1]);
 
-    exit(1);
-  }
+		exit(1);
+	}
 
-  fseek(fp, 0, SEEK_END);
-  int len = ftell(fp);
-  fprintf(stdout, "file length is %d\n", len);
+	fseek(fp, 0, SEEK_END);
+	int len = ftell(fp);
+	fprintf(stdout, "file length is %d\n", len);
 
-  char *prg_text = xmalloc(len + 1); // +1 so we have a null byte in the end.
+	char *prg_text = xmalloc(len + 1); // +1 so we have a null byte in the end.
 
-  rewind(fp);
-  size_t bytesread = fread(prg_text, 1, len, fp);
-  printf("read byte %lu\n", bytesread);
-  prg_text[len] = 0; // explicit null termination (?)
-  fclose(fp);
-  // done reading a file!
+	rewind(fp);
+	size_t bytesread = fread(prg_text, 1, len, fp);
+	printf("read byte %lu\n", bytesread);
+	prg_text[len] = 0; // explicit null termination (?)
+	fclose(fp);
+	// done reading a file!
 
-  printf("printing file contents...\n");
-  printf("%s\n", prg_text);
+	printf("printing file contents...\n");
+	printf("%s\n", prg_text);
 
-  obj *prg = compile(prg_text); // basically a tokenize step.
-  exec(prg);
+	obj *prg = compile(prg_text); // basically a tokenize step.
+	print_object(prg);
 
-  return 0;
+	return 0;
 }
