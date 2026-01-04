@@ -4,6 +4,8 @@
 #include <string.h>
 #include <unistd.h>
 
+int debug = 0;
+
 // ------------------------- Data structures
 
 #define OBJ_INT 1
@@ -184,31 +186,30 @@ obj *compile(char *prg) {
 
 // ------------------------- execution
 
-void print_object(obj *prg) {
-	switch (prg->type) {
+void print_object(obj *o) {
+	switch (o->type) {
+	case OBJ_INT:
+		printf("%d", o->i);
+
+		break;
 	case OBJ_LIST:
-		//
+		printf("[");
+		for (size_t j = 0; j < o->list.len; j++) {
+			obj *elem = o->list.elements[j];
+			print_object(elem);
+			if (j != o->list.len - 1) {
+				printf(",");
+			}
+		}
+		printf("]");
+		printf("\n");
+
 		break;
 	default:
-		printf("unexpected object type, got %d", prg->type);
+		printf("unexpected object type, got %d", o->type);
+
 		return;
 	}
-
-	for (size_t j = 0; j < prg->list.len; j++) {
-		obj *o = prg->list.elements[j];
-		switch (o->type) {
-		case OBJ_INT:
-			printf("%d", o->i);
-			break;
-		default:
-			printf("?");
-			break;
-		}
-
-		printf(" ");
-	}
-
-	printf("\n");
 }
 
 // ------------------------- Main
@@ -218,36 +219,57 @@ void print_object(obj *prg) {
 
 int main(int argc, char *argv[]) {
 	if (argc < 2) {
-		fprintf(stderr, "usage: %s <filename>\n", argv[0]);
+		fprintf(stderr, "usage: %s [-d|--debug] <filename>\n", argv[0]);
+
+		return 1;
+	}
+
+	int argidx = 1;
+	if (strcmp(argv[1], "-d") == 0 || strcmp(argv[1], "--debug") == 0) {
+		debug = 1;
+		argidx++;
+	}
+
+	if (argidx >= argc) {
+		fprintf(stderr, "usage: %s [-d|--debug] <filename>\n", argv[0]);
 
 		return 1;
 	}
 
 	// read program into memory for parsing
-	printf("reading file: %s...\n", argv[1]);
+	if (debug) {
+		fprintf(stdout, "debug: reading file: %s...\n", argv[argidx]);
+	}
 
-	FILE *fp = fopen(argv[1], "r");
+	FILE *fp = fopen(argv[argidx], "r");
 	if (fp == NULL) {
-		fprintf(stderr, "unable to open file %s\n", argv[1]);
+		fprintf(stderr, "unable to open file %s\n", argv[argidx]);
 
 		exit(1);
 	}
 
 	fseek(fp, 0, SEEK_END);
 	int len = ftell(fp);
-	fprintf(stdout, "file length is %d\n", len);
+
+	if (debug) {
+		fprintf(stdout, "debug: file length is %d\n", len);
+	}
 
 	char *prg_text = xmalloc(len + 1); // +1 so we have a null byte in the end.
 
 	rewind(fp);
 	size_t bytesread = fread(prg_text, 1, len, fp);
-	printf("read byte %lu\n", bytesread);
+	if (debug) {
+		printf("debug: read byte %lu\n", bytesread);
+	}
 	prg_text[len] = 0; // explicit null termination (?)
 	fclose(fp);
 	// done reading a file!
 
-	printf("printing file contents...\n");
-	printf("%s\n", prg_text);
+	if (debug) {
+		fprintf(stdout, "debug: printing file contents...\n");
+		fprintf(stdout, "debug: %s\n", prg_text);
+	}
 
 	obj *prg = compile(prg_text); // basically a tokenize step.
 	print_object(prg);
