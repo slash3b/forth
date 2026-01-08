@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,9 +36,22 @@ typedef struct parser {
 	char *p; // next token to parse
 } parser;
 
+// FunctionTableEntry represents a function name assiciated with its implementation.
+typedef struct {
+	obj *name;
+	void (*callback)(ctx *c, obj *o);
+	obj *userList;
+} FunctionTableEntry;
+
+typedef struct {
+    FunctionTableEntry **entries;
+    size_t len;
+} FunctionTable;
+
 // execution context
 typedef struct ctx {
 	obj *stack;
+    FunctionTable functable;
 } ctx;
 
 // ------------------------- allocation wrappers
@@ -50,6 +64,16 @@ void *xmalloc(size_t size) {
 	}
 
 	return res;
+}
+
+void *xrealloc(void *oldptr, size_t size) {
+	void *ptr = realloc(oldptr, size);
+	if (ptr == NULL) {
+		fprintf(stderr, "unable to allocate %zu bytes of memory", size);
+		exit(1);
+	}
+
+	return ptr;
 }
 
 // ------------------------- DS functions
@@ -88,8 +112,6 @@ obj *makebool(int i) {
 	return res;
 }
 
-// list
-
 obj *makelist() {
 	obj *res = createobj(OBJ_LIST);
 
@@ -97,13 +119,6 @@ obj *makelist() {
 	res->list.len = 0;
 
 	return res;
-}
-
-void listPush(obj *o, obj *o2) {
-	o->list.elements =
-	    realloc(o->list.elements, sizeof(obj *) * (o->list.len + 1));
-	o->list.elements[o->list.len] = o2;
-	o->list.len++;
 }
 
 // symbol is our function symbol
@@ -117,6 +132,50 @@ obj *makesymbol(char *p, int len) {
 	res->str.ptr[len] = 0;
 
 	return res;
+}
+
+void printObject(obj *o) {
+	switch (o->type) {
+	case OBJ_SYMBOL:
+		printf("%s", o->str.ptr);
+
+		break;
+	case OBJ_STR:
+		printf("\"%s\"", o->str.ptr);
+
+		break;
+	case OBJ_INT:
+		printf("%d", o->i);
+
+		break;
+	case OBJ_LIST:
+		printf("[");
+		for (size_t j = 0; j < o->list.len; j++) {
+			obj *elem = o->list.elements[j];
+			printObject(elem);
+			if (j != o->list.len - 1) {
+				printf(",");
+			}
+		}
+		printf("]");
+		printf("\n");
+
+		break;
+	default:
+		printf("unexpected object type, got %d", o->type);
+
+		return;
+	}
+}
+
+// ---------------------------------------------------------------------------
+
+void listPush(obj *o, obj *o2) {
+	o->list.elements =
+	    xrealloc(o->list.elements, sizeof(obj *) * (o->list.len + 1));
+
+	o->list.elements[o->list.len] = o2;
+	o->list.len++;
 }
 
 void parseSpaces(parser *par) {
@@ -155,7 +214,7 @@ obj *parseNumber(parser *par) {
 }
 
 int issymbolchar(int c) {
-	char symbols[] = "+-/*%";
+	char symbols[] = "+-/*%.";
 
 	if (isalpha(c)) {
 		return 1;
@@ -182,7 +241,13 @@ obj *parseSymbol(parser *par) {
 
 // compile
 
+void release(obj *o);
+
 obj *compile(char *prg) {
+	if (debug) {
+		fprintf(stdout, "debug: compilation started\n");
+	}
+
 	parser *par = xmalloc(sizeof(parser));
 	par->prg = prg;
 	par->p = prg;
@@ -209,6 +274,7 @@ obj *compile(char *prg) {
 		}
 
 		if (o == NULL) {
+            release(parsed);
 			printf("unexpected token %10s ...\n", token_start);
 
 			return NULL;
@@ -217,40 +283,14 @@ obj *compile(char *prg) {
 		}
 	}
 
+	if (debug) {
+		fprintf(stdout, "debug: compilation finished\n");
+	}
+
 	return parsed;
 }
 
 // ------------------------- execution
-
-void print_object(obj *o) {
-	switch (o->type) {
-	case OBJ_SYMBOL:
-		printf("%s", o->str.ptr);
-
-		break;
-	case OBJ_INT:
-		printf("%d", o->i);
-
-		break;
-	case OBJ_LIST:
-		printf("[");
-		for (size_t j = 0; j < o->list.len; j++) {
-			obj *elem = o->list.elements[j];
-			print_object(elem);
-			if (j != o->list.len - 1) {
-				printf(",");
-			}
-		}
-		printf("]");
-		printf("\n");
-
-		break;
-	default:
-		printf("unexpected object type, got %d", o->type);
-
-		return;
-	}
-}
 
 char *filegetcontents(char *pathname) {
 	if (debug) {
@@ -291,7 +331,86 @@ char *filegetcontents(char *pathname) {
 	return prg_text;
 }
 
-// ------------------------- Main
+void retain(obj *o) {
+	o->refcount++;
+}
+
+void freeObject(obj *o) {
+	switch (o->type) {
+	case OBJ_LIST:
+
+		for (size_t i = 0; i < o->list.len; i++) {
+			obj *elem = o->list.elements[i];
+
+			release(elem); // what if we can not free o after all?
+		}
+
+		break;
+	case OBJ_SYMBOL:
+	case OBJ_STR:
+		free(o->str.ptr);
+
+		break;
+	}
+
+	free(o);
+}
+
+void release(obj *o) {
+	assert(o->refcount > 0);
+
+	o->refcount--;
+
+	if (o->refcount == 0) {
+		freeObject(o);
+	}
+}
+
+// ------------------------- exec with context
+//
+
+// what is it? execution context
+// why do we need it?
+// dunno
+// but for now we throw on stack only numeric values. functions and such are not being put on stack
+ctx *createContext(void) {
+	ctx *c = xmalloc(sizeof(*c));
+	c->stack = makelist();
+
+    c->functable.entries = NULL;
+    c->functable.len = 0;
+
+    registerFunctions(c, "+", basicMathFunctions);
+
+	return c;
+}
+
+// callSymbol practically tries to resolve a symbol, that is a function name for instance.
+// returns 0 if success.
+int callSymbol(ctx *c, obj *o) {
+	(void)c;
+	(void)o;
+
+	return 0;
+}
+
+void exec(ctx *c, obj *o) {
+	assert(o->type == OBJ_LIST);
+
+	for (size_t i = 0; i < o->list.len; i++) {
+		obj *word = o->list.elements[i];
+		switch (word->type) {
+		case OBJ_SYMBOL:
+			callSymbol(c, word);
+			break;
+		default:
+			listPush(c->stack, word);
+			retain(word);
+		}
+	}
+}
+
+// ------------------------- main
 
 // argc argument count
 // argv argument vector
@@ -317,7 +436,12 @@ int main(int argc, char *argv[]) {
 
 	char *prg_text = filegetcontents(argv[argidx]);
 	obj *prg = compile(prg_text); // basically a tokenize step.
-	print_object(prg);
+	printObject(prg);
+
+	ctx *c = createContext();
+	exec(c, prg);
+	printf("Stack context at end: \n");
+	printObject(c->stack);
 
 	return 0;
 }
