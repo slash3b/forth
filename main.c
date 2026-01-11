@@ -36,6 +36,8 @@ typedef struct parser {
 	char *p; // next token to parse
 } parser;
 
+typedef struct ctx ctx;
+
 // FunctionTableEntry represents a function name assiciated with its implementation.
 typedef struct {
 	obj *name;
@@ -55,6 +57,7 @@ typedef struct ctx {
 	obj *stack;
 	FunctionTable functable;
 } ctx;
+
 
 // ------------------------- allocation wrappers
 
@@ -395,10 +398,10 @@ void release(obj *o) {
 // todo: why do we search based on obj * name?
 // I think we can just use string...
 FunctionTableEntry *getFunctionByName(ctx *c, obj *o) {
-	for (size_t i = 0; i < c.functable.len; i++) {
-		FunctionTableEntry *fe = c.functable[i];
+	for (size_t i = 0; i < c->functable.len; i++) {
+		FunctionTableEntry *fe = c->functable.entries[i];
 
-		int res = compareStringObjects(fe, o);
+		int res = compareStringObjects(fe->name, o);
 		if (res == 0) {
 			return fe;
 		}
@@ -414,11 +417,11 @@ FunctionTableEntry *initFunction(ctx *c, obj *o) {
 	c->functable.entries[c->functable.len] = fte;
 	c->functable.len++;
 
-	fte.name = o;
-	retain(name);
+	fte->name = o;
+	retain(o);
 
-	fe->callback = NULL;
-	fe->userfunction = NULL;
+	fte->callback = NULL;
+	fte->userfunction = NULL;
 
 	return fte;
 }
@@ -432,7 +435,7 @@ void registerFunction(
     void (*callback)(ctx *c, obj *o)) {
 
 	obj *o2 = makestring(name, strlen(name));
-	FunctionTableEntry *fte = getFunctionByName(c, name);
+	FunctionTableEntry *fte = getFunctionByName(c, o2);
 	if (fte == NULL) {
 		release(o2);
 
@@ -445,20 +448,26 @@ void registerFunction(
 	if (fte->userfunction != NULL) {
 		release(fte->userfunction);
 
-		fte->userfunction == NULL;
+		fte->userfunction = NULL;
 
 		fte->callback = callback;
 
 		return;
 	}
 
-	fte = initFunction(ctx, o2);
+	fte = initFunction(c, o2);
 	fte->callback = callback;
 
 	// append to function table in ctx??
 	// or somehow in a global register??
 
 	release(o2);
+}
+
+void basicMathFunction(ctx *c, obj *o) {
+	(void)c;
+	(void)o;
+	// TODO: implement basic math operations
 }
 
 // what is it? execution context
@@ -472,7 +481,7 @@ ctx *createContext(void) {
 	c->functable.entries = NULL;
 	c->functable.len = 0;
 
-	registerFunction(c, "+", basicMathFunctions);
+	registerFunction(c, "+", basicMathFunction);
 
 	return c;
 }
@@ -482,7 +491,8 @@ ctx *createContext(void) {
 // returns 0 on success, 1 on error.
 int callSymbol(ctx *c, obj *o) {
 	// our function
-	FunctionTableEntry *fte = getFunctionByName(c, o->str.ptr);
+    // todo: assert o is of type OBJ_SYMBOL.
+	FunctionTableEntry *fte = getFunctionByName(c, o);
 	if (fte == NULL) {
 		return 1;
 	}
