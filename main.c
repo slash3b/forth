@@ -39,19 +39,21 @@ typedef struct parser {
 // FunctionTableEntry represents a function name assiciated with its implementation.
 typedef struct {
 	obj *name;
+	// this is builtin function.
 	void (*callback)(ctx *c, obj *o);
-	obj *userList;
+	// this is user defined function.
+	obj *userfunction;
 } FunctionTableEntry;
 
 typedef struct {
-    FunctionTableEntry **entries;
-    size_t len;
+	FunctionTableEntry **entries;
+	size_t len;
 } FunctionTable;
 
 // execution context
 typedef struct ctx {
 	obj *stack;
-    FunctionTable functable;
+	FunctionTable functable;
 } ctx;
 
 // ------------------------- allocation wrappers
@@ -112,28 +114,6 @@ obj *makebool(int i) {
 	return res;
 }
 
-obj *makelist() {
-	obj *res = createobj(OBJ_LIST);
-
-	res->list.elements = NULL;
-	res->list.len = 0;
-
-	return res;
-}
-
-// symbol is our function symbol
-obj *makesymbol(char *p, int len) {
-	obj *res = createobj(OBJ_SYMBOL);
-
-	res->str.ptr = xmalloc(len + 1);
-	res->str.len = len;
-
-	memcpy(res->str.ptr, p, len);
-	res->str.ptr[len] = 0;
-
-	return res;
-}
-
 void printObject(obj *o) {
 	switch (o->type) {
 	case OBJ_SYMBOL:
@@ -166,6 +146,48 @@ void printObject(obj *o) {
 
 		return;
 	}
+}
+
+// ----------------------------- list & symbol objects ------------------------
+
+obj *makelist() {
+	obj *res = createobj(OBJ_LIST);
+
+	res->list.elements = NULL;
+	res->list.len = 0;
+
+	return res;
+}
+
+// symbol is our function symbol
+obj *makesymbol(char *p, int len) {
+	obj *res = createobj(OBJ_SYMBOL);
+
+	res->str.ptr = xmalloc(len + 1);
+	res->str.len = len;
+
+	memcpy(res->str.ptr, p, len);
+	res->str.ptr[len] = 0;
+
+	return res;
+}
+
+// compareStringObjects does return 0 if both objects are equal,
+// returns 1 otherwise.
+int compareStringObjects(obj *a, obj *b) {
+	assert(a != NULL && b != NULL);
+	assert(a->type == OBJ_STR && b->type == OBJ_STR);
+
+	if (a->str.len != b->str.len) {
+		return 1;
+	}
+
+	int cmp = memcmp(a->str.ptr, b->str.ptr, a->str.len);
+	if (cmp != 0) {
+		return 1;
+	}
+
+	return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -274,7 +296,7 @@ obj *compile(char *prg) {
 		}
 
 		if (o == NULL) {
-            release(parsed);
+			release(parsed);
 			printf("unexpected token %10s ...\n", token_start);
 
 			return NULL;
@@ -367,7 +389,77 @@ void release(obj *o) {
 }
 
 // ------------------------- exec with context
-//
+
+// getFunctionByName iterates over function table and returns
+// function entry if present.
+// todo: why do we search based on obj * name?
+// I think we can just use string...
+FunctionTableEntry *getFunctionByName(ctx *c, obj *o) {
+	for (size_t i = 0; i < c.functable.len; i++) {
+		FunctionTableEntry *fe = c.functable[i];
+
+		int res = compareStringObjects(fe, o);
+		if (res == 0) {
+			return fe;
+		}
+	}
+
+	return NULL;
+}
+
+FunctionTableEntry *initFunction(ctx *c, obj *o) {
+	c->functable.entries = xrealloc(c->functable.entries, c->functable.len + 1);
+	FunctionTableEntry *fte = xmalloc(sizeof(FunctionTableEntry *));
+
+	c->functable.entries[c->functable.len] = fte;
+	c->functable.len++;
+
+	fte.name = o;
+	retain(name);
+
+	fe->callback = NULL;
+	fe->userfunction = NULL;
+
+	return fte;
+}
+
+//registerFunctions does install a function into current execution context
+// with given name. The function can't fail since if the function by the same
+// name already exists, it will be replaced by the new one.
+void registerFunction(
+    ctx *c,
+    char *name,
+    void (*callback)(ctx *c, obj *o)) {
+
+	obj *o2 = makestring(name, strlen(name));
+	FunctionTableEntry *fte = getFunctionByName(c, name);
+	if (fte == NULL) {
+		release(o2);
+
+		return;
+	}
+
+	// todo: why are we doing this?
+	// this is probably just looks over case when we have
+	// user function matching builtin function...
+	if (fte->userfunction != NULL) {
+		release(fte->userfunction);
+
+		fte->userfunction == NULL;
+
+		fte->callback = callback;
+
+		return;
+	}
+
+	fte = initFunction(ctx, o2);
+	fte->callback = callback;
+
+	// append to function table in ctx??
+	// or somehow in a global register??
+
+	release(o2);
+}
 
 // what is it? execution context
 // why do we need it?
@@ -377,19 +469,25 @@ ctx *createContext(void) {
 	ctx *c = xmalloc(sizeof(*c));
 	c->stack = makelist();
 
-    c->functable.entries = NULL;
-    c->functable.len = 0;
+	c->functable.entries = NULL;
+	c->functable.len = 0;
 
-    registerFunctions(c, "+", basicMathFunctions);
+	registerFunction(c, "+", basicMathFunctions);
 
 	return c;
 }
 
-// callSymbol practically tries to resolve a symbol, that is a function name for instance.
-// returns 0 if success.
+// callSymbol is being called during exec-ution.
+// it tries to resolve and call the function associated with word, `o` in our case.
+// returns 0 on success, 1 on error.
 int callSymbol(ctx *c, obj *o) {
-	(void)c;
-	(void)o;
+	// our function
+	FunctionTableEntry *fte = getFunctionByName(c, o->str.ptr);
+	if (fte == NULL) {
+		return 1;
+	}
+
+	// todo: run function...?
 
 	return 0;
 }
