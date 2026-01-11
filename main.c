@@ -16,17 +16,17 @@ int debug = 0;
 #define OBJ_SYMBOL 5
 
 typedef struct obj {
-	int refcount;
-	int type; // OBJ_*
+	int refcount; // 4 bytes
+	int type; // OBJ_*; 4 bytes
 	union {
-		int i;
+		int i; // 4 bytes;
 		struct {
-			char *ptr;
-			size_t len;
+			char *ptr; // 8 bytes;
+			size_t len; // 8 bytes;
 		} str;
 		struct {
-			struct obj **elements;
-			size_t len;
+			struct obj **elements; // 8 bytes;
+			size_t len; // 8 bytes;
 		} list;
 	};
 } obj;
@@ -57,7 +57,6 @@ typedef struct ctx {
 	obj *stack;
 	FunctionTable functable;
 } ctx;
-
 
 // ------------------------- allocation wrappers
 
@@ -391,6 +390,54 @@ void release(obj *o) {
 	}
 }
 
+// ------------------------- basic standard library
+
+int stackLenght(ctx *c) {
+    // todo:
+}
+
+void basicMathFunction(ctx *c, obj *o) {
+	if (o.type != OBJ_SYMBOL) {
+		fprintf(stderr, "Error: expected symbol, instead got %s\n", o.type);
+		return;
+	}
+
+	if (stackLength(c) < 2) {
+		fprintf(stderr, "Error: stack underflow\n");
+		return;
+	}
+
+	obj *b = stackPop(c, OBJ_INT);
+	obj *a = stackPop(c, OBJ_INT);
+
+	if (a == NULL || b == NULL) {
+		fprintf(stderr, "Error: expected integer\n");
+		return;
+	}
+
+	int result;
+
+	switch (o->str.ptr[0]) {
+	case '+':
+		result = a->i + b->i;
+		break;
+	case '-':
+		result = a->i - b->i;
+		break;
+	case '*':
+		result = a->i * b->i;
+		break;
+	case '/':
+		result = a->i / b->i;
+		break;
+	case '%':
+		result = a->i % b->i;
+		break;
+	}
+
+	return result;
+}
+
 // ------------------------- exec with context
 
 // getFunctionByName iterates over function table and returns
@@ -426,9 +473,9 @@ FunctionTableEntry *initFunction(ctx *c, obj *o) {
 	return fte;
 }
 
-//registerFunctions does install a function into current execution context
-// with given name. The function can't fail since if the function by the same
-// name already exists, it will be replaced by the new one.
+// registerFunction does install a function into current execution context
+//  with given name. The function can't fail since if the function by the same
+//  name already exists, it will be replaced by the new one.
 void registerFunction(
     ctx *c,
     char *name,
@@ -464,12 +511,6 @@ void registerFunction(
 	release(o2);
 }
 
-void basicMathFunction(ctx *c, obj *o) {
-	(void)c;
-	(void)o;
-	// TODO: implement basic math operations
-}
-
 // what is it? execution context
 // why do we need it?
 // dunno
@@ -491,7 +532,7 @@ ctx *createContext(void) {
 // returns 0 on success, 1 on error.
 int callSymbol(ctx *c, obj *o) {
 	// our function
-    // todo: assert o is of type OBJ_SYMBOL.
+	// todo: assert o is of type OBJ_SYMBOL.
 	FunctionTableEntry *fte = getFunctionByName(c, o);
 	if (fte == NULL) {
 		return 1;
