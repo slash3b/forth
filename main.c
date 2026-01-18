@@ -42,9 +42,9 @@ typedef struct ctx ctx;
 typedef struct {
 	obj *name;
 	// this is builtin function.
-	void (*callback)(ctx *c, obj *o);
+	int (*callback)(ctx *c, char *o);
 	// this is user defined function.
-	obj *userfunction;
+	int (*userfunction)(ctx *c, char *o);
 } FunctionTableEntry;
 
 typedef struct {
@@ -178,7 +178,7 @@ obj *makesymbol(char *p, int len) {
 // returns 1 otherwise.
 int compareStringObjects(obj *a, obj *b) {
 	assert(a != NULL && b != NULL);
-	assert(a->type == OBJ_STR && b->type == OBJ_STR);
+	assert((a->type == OBJ_STR || a->type == OBJ_SYMBOL) && (b->type == OBJ_STR || b->type == OBJ_SYMBOL));
 
 	if (a->str.len != b->str.len) {
 		return 1;
@@ -212,7 +212,7 @@ void parseSpaces(parser *par) {
 obj *parseNumber(parser *par) {
 	char buf[MAX_NUM_LEN];
 	char *start = par->p;
-	char *end;
+	char *end = start;
 
 	if (par->p[0] == '-') {
 		par->p++;
@@ -291,10 +291,10 @@ obj *compile(char *prg) {
 		if (isdigit(par->p[0]) ||
 		    (par->p[0] == '-' && par->p[1] != '\0' && isdigit(par->p[1]))) {
 			o = parseNumber(par);
-		}
-
-		if (issymbolchar(par->p[0])) {
+		} else if (issymbolchar(par->p[0])) {
 			o = parseSymbol(par);
+		} else {
+			o = NULL;
 		}
 
 		if (o == NULL) {
@@ -390,21 +390,60 @@ void release(obj *o) {
 	}
 }
 
-// ------------------------- basic standard library
+// ------------------------- exec with context
 
-int stackLenght(ctx *c) {
-    // todo:
+int stackLength(ctx *c) {
+	assert(c != NULL);
+	assert(c->stack->type == OBJ_LIST);
+
+	return c->stack->list.len;
 }
 
-void basicMathFunction(ctx *c, obj *o) {
-	if (o.type != OBJ_SYMBOL) {
-		fprintf(stderr, "Error: expected symbol, instead got %s\n", o.type);
-		return;
+obj *stackPop(ctx *c, int type) {
+	assert(c != NULL);
+	assert(c->stack->type == OBJ_LIST);
+	(void)type;
+
+	int len = stackLength(c);
+	if (len == 0) {
+		return NULL;
 	}
 
+	obj *stack = c->stack;
+
+	// lets just reuse that space?
+	// I am thinking no need to call xrealloc here
+	// hmm...
+	// so I'd have [1,2,3] with lee=3
+	// after pop
+	// I'd have [1,2,NULL] with len=2
+
+	/* o->list.elements = */
+	/*     xrealloc(o->list.elements, sizeof(obj *) * (o->list.len + 1)); */
+
+	obj *pop = stack->list.elements[c->stack->list.len - 1];
+
+	if (stack->list.len == 0) {
+		free(stack->list.elements);
+		stack->list.elements = NULL;
+	}
+
+	stack->list.elements[stack->list.len - 1] = NULL;
+	stack->list.len--;
+
+	return pop;
+}
+
+void stackPush(ctx *c, obj *o) {
+	listPush(c->stack, o);
+}
+
+// -------------------------------- std library
+
+int basicMathFunction(ctx *c, char *name) {
 	if (stackLength(c) < 2) {
 		fprintf(stderr, "Error: stack underflow\n");
-		return;
+		return 1;
 	}
 
 	obj *b = stackPop(c, OBJ_INT);
@@ -412,12 +451,12 @@ void basicMathFunction(ctx *c, obj *o) {
 
 	if (a == NULL || b == NULL) {
 		fprintf(stderr, "Error: expected integer\n");
-		return;
+		return 1;
 	}
 
-	int result;
+	int result = 0;
 
-	switch (o->str.ptr[0]) {
+	switch (name[0]) {
 	case '+':
 		result = a->i + b->i;
 		break;
@@ -435,15 +474,18 @@ void basicMathFunction(ctx *c, obj *o) {
 		break;
 	}
 
-	return result;
-}
+	stackPush(c, makeint(result));
 
-// ------------------------- exec with context
+	return 0;
+}
 
 // getFunctionByName iterates over function table and returns
 // function entry if present.
 // todo: why do we search based on obj * name?
 // I think we can just use string...
+//
+// curious from video, we are not modifying reference counting
+// ownership transfer is assumed.
 FunctionTableEntry *getFunctionByName(ctx *c, obj *o) {
 	for (size_t i = 0; i < c->functable.len; i++) {
 		FunctionTableEntry *fe = c->functable.entries[i];
@@ -459,7 +501,7 @@ FunctionTableEntry *getFunctionByName(ctx *c, obj *o) {
 
 FunctionTableEntry *initFunction(ctx *c, obj *o) {
 	c->functable.entries = xrealloc(c->functable.entries, c->functable.len + 1);
-	FunctionTableEntry *fte = xmalloc(sizeof(FunctionTableEntry *));
+	FunctionTableEntry *fte = xmalloc(sizeof(FunctionTableEntry));
 
 	c->functable.entries[c->functable.len] = fte;
 	c->functable.len++;
@@ -479,35 +521,23 @@ FunctionTableEntry *initFunction(ctx *c, obj *o) {
 void registerFunction(
     ctx *c,
     char *name,
-    void (*callback)(ctx *c, obj *o)) {
+    int (*callback)(ctx *c, char *o)) {
 
 	obj *o2 = makestring(name, strlen(name));
 	FunctionTableEntry *fte = getFunctionByName(c, o2);
+
 	if (fte == NULL) {
-		release(o2);
-
-		return;
-	}
-
-	// todo: why are we doing this?
-	// this is probably just looks over case when we have
-	// user function matching builtin function...
-	if (fte->userfunction != NULL) {
-		release(fte->userfunction);
-
-		fte->userfunction = NULL;
-
+		// function doesn't exist, create it
+		fte = initFunction(c, o2);
 		fte->callback = callback;
-
 		return;
 	}
 
-	fte = initFunction(c, o2);
+	// function exists, update it
+	if (fte->userfunction != NULL) {
+		fte->userfunction = NULL;
+	}
 	fte->callback = callback;
-
-	// append to function table in ctx??
-	// or somehow in a global register??
-
 	release(o2);
 }
 
@@ -531,11 +561,19 @@ ctx *createContext(void) {
 // it tries to resolve and call the function associated with word, `o` in our case.
 // returns 0 on success, 1 on error.
 int callSymbol(ctx *c, obj *o) {
-	// our function
+	//
 	// todo: assert o is of type OBJ_SYMBOL.
+	//
+
 	FunctionTableEntry *fte = getFunctionByName(c, o);
 	if (fte == NULL) {
 		return 1;
+	}
+
+	if (fte->userfunction) {
+		fte->userfunction(c, o->str.ptr); // ??
+	} else if (fte->callback) {
+		return fte->callback(c, o->str.ptr); // ??
 	}
 
 	// todo: run function...?
@@ -543,20 +581,28 @@ int callSymbol(ctx *c, obj *o) {
 	return 0;
 }
 
-void exec(ctx *c, obj *o) {
+// exec is the main function of this whole language.
+//
+int exec(ctx *c, obj *o) {
 	assert(o->type == OBJ_LIST);
 
 	for (size_t i = 0; i < o->list.len; i++) {
 		obj *word = o->list.elements[i];
 		switch (word->type) {
 		case OBJ_SYMBOL:
-			callSymbol(c, word);
+			if (callSymbol(c, word) != 0) {
+				printf("Run time errors, oopsied doopsie.");
+
+				return 1;
+			}
 			break;
 		default:
 			listPush(c->stack, word);
 			retain(word);
 		}
 	}
+
+	return 0;
 }
 
 // ------------------------- main
@@ -588,7 +634,10 @@ int main(int argc, char *argv[]) {
 	printObject(prg);
 
 	ctx *c = createContext();
-	exec(c, prg);
+	int statuscode = exec(c, prg);
+	if (statuscode != 0) {
+		printf("failed to execute");
+	}
 	printf("Stack context at end: \n");
 	printObject(c->stack);
 

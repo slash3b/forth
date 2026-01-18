@@ -11,7 +11,7 @@ format:
 
 toyforth: main.c
 	# build with warnings and optimization livel 2
-	gcc -Wall -W 02 main.c -o toyforth
+	gcc -Wall -W -O2 main.c -o toyforth
 
 clean:
 	rm toyforth
