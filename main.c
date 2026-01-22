@@ -174,6 +174,21 @@ obj *makesymbol(char *p, int len) {
 	return res;
 }
 
+obj *cloneobj(obj *o) {
+    if (o == NULL) {
+        return o;
+    }
+
+    switch (o->type) {
+    case OBJ_INT:
+        obj *o2 = makeint(o->i);
+
+        return o2;
+    }
+
+    return NULL;
+}
+
 // compareStringObjects does return 0 if both objects are equal,
 // returns 1 otherwise.
 int compareStringObjects(obj *a, obj *b) {
@@ -402,7 +417,8 @@ int stackLength(ctx *c) {
 obj *stackPop(ctx *c, int type) {
 	assert(c != NULL);
 	assert(c->stack->type == OBJ_LIST);
-	(void)type;
+
+    (void)(type);
 
 	int len = stackLength(c);
 	if (len == 0) {
@@ -479,6 +495,20 @@ int basicMathFunction(ctx *c, char *name) {
 	return 0;
 }
 
+int duplicate(ctx *c, char * unused) {
+	if (stackLength(c) == 0) {
+		fprintf(stderr, "DUP attempted while stack is empty\n");
+		return 1;
+	}
+
+    (void)(unused);
+
+	obj *o2 = c->stack->list.elements[c->stack->list.len-1];
+
+	stackPush(c, o2);
+	return 0;
+}
+
 // getFunctionByName iterates over function table and returns
 // function entry if present.
 // todo: why do we search based on obj * name?
@@ -500,7 +530,7 @@ FunctionTableEntry *getFunctionByName(ctx *c, obj *o) {
 }
 
 FunctionTableEntry *initFunction(ctx *c, obj *o) {
-	c->functable.entries = xrealloc(c->functable.entries, c->functable.len + 1);
+	c->functable.entries = xrealloc(c->functable.entries, sizeof(FunctionTableEntry *) * (c->functable.len + 1));
 	FunctionTableEntry *fte = xmalloc(sizeof(FunctionTableEntry));
 
 	c->functable.entries[c->functable.len] = fte;
@@ -537,6 +567,7 @@ void registerFunction(
 	if (fte->userfunction != NULL) {
 		fte->userfunction = NULL;
 	}
+
 	fte->callback = callback;
 	release(o2);
 }
@@ -553,6 +584,12 @@ ctx *createContext(void) {
 	c->functable.len = 0;
 
 	registerFunction(c, "+", basicMathFunction);
+	registerFunction(c, "-", basicMathFunction);
+	registerFunction(c, "*", basicMathFunction);
+	registerFunction(c, "/", basicMathFunction);
+	registerFunction(c, "%", basicMathFunction);
+	registerFunction(c, "%", basicMathFunction);
+	registerFunction(c, "dup", duplicate);
 
 	return c;
 }
@@ -607,11 +644,11 @@ int exec(ctx *c, obj *o) {
 
 // ------------------------- main
 
-// argc argument count
-// argv argument vector
+// argc: argument count
+// argv: argument vector
 
 int main(int argc, char *argv[]) {
-	if (argc < 2) {
+	if (argc < 2 || argc > 3) {
 		fprintf(stderr, "usage: %s [-d|--debug] <filename>\n", argv[0]);
 
 		return 1;
@@ -623,14 +660,10 @@ int main(int argc, char *argv[]) {
 		argidx++;
 	}
 
-	if (argidx >= argc) {
-		fprintf(stderr, "usage: %s [-d|--debug] <filename>\n", argv[0]);
-
-		return 1;
-	}
-
 	char *prg_text = filegetcontents(argv[argidx]);
-	obj *prg = compile(prg_text); // basically a tokenize step.
+    // basically a tokenize step.
+	obj *prg = compile(prg_text);
+	printf("printing program parsed");
 	printObject(prg);
 
 	ctx *c = createContext();
@@ -638,6 +671,7 @@ int main(int argc, char *argv[]) {
 	if (statuscode != 0) {
 		printf("failed to execute");
 	}
+
 	printf("Stack context at end: \n");
 	printObject(c->stack);
 
