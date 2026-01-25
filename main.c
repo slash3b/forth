@@ -175,18 +175,18 @@ obj *makesymbol(char *p, int len) {
 }
 
 obj *cloneobj(obj *o) {
-    if (o == NULL) {
-        return o;
-    }
+	if (o == NULL) {
+		return o;
+	}
 
-    switch (o->type) {
-    case OBJ_INT:
-        obj *o2 = makeint(o->i);
+	switch (o->type) {
+	case OBJ_INT:
+		obj *o2 = makeint(o->i);
 
-        return o2;
-    }
+		return o2;
+	}
 
-    return NULL;
+	return NULL;
 }
 
 // compareStringObjects does return 0 if both objects are equal,
@@ -418,7 +418,7 @@ obj *stackPop(ctx *c, int type) {
 	assert(c != NULL);
 	assert(c->stack->type == OBJ_LIST);
 
-    (void)(type);
+	(void)(type);
 
 	int len = stackLength(c);
 	if (len == 0) {
@@ -495,15 +495,15 @@ int basicMathFunction(ctx *c, char *name) {
 	return 0;
 }
 
-int duplicate(ctx *c, char * unused) {
+int duplicate(ctx *c, char *unused) {
 	if (stackLength(c) == 0) {
 		fprintf(stderr, "DUP attempted while stack is empty\n");
 		return 1;
 	}
 
-    (void)(unused);
+	(void)(unused);
 
-	obj *o2 = c->stack->list.elements[c->stack->list.len-1];
+	obj *o2 = c->stack->list.elements[c->stack->list.len - 1];
 
 	stackPush(c, o2);
 	return 0;
@@ -661,7 +661,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	char *prg_text = filegetcontents(argv[argidx]);
-    // basically a tokenize step.
+	// basically a tokenize step.
 	obj *prg = compile(prg_text);
 	printf("printing program parsed");
 	printObject(prg);
