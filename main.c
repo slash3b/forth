@@ -60,6 +60,9 @@ typedef struct ctx {
 
 // ------------------------- allocation wrappers
 
+// xmalloc wraps around malloc,
+// iensures memory is allocated, othewise entire
+// program will crash.
 void *xmalloc(size_t size) {
 	void *res = malloc(size);
 	if (res == NULL) {
@@ -70,6 +73,7 @@ void *xmalloc(size_t size) {
 	return res;
 }
 
+// xrealloc is a wrapper around realloc
 void *xrealloc(void *oldptr, size_t size) {
 	void *ptr = realloc(oldptr, size);
 	if (ptr == NULL) {
@@ -325,6 +329,8 @@ obj *compile(char *prg) {
 	if (debug) {
 		fprintf(stdout, "debug: compilation finished\n");
 	}
+
+	free(par);
 
 	return parsed;
 }
@@ -661,19 +667,27 @@ int main(int argc, char *argv[]) {
 	}
 
 	char *prg_text = filegetcontents(argv[argidx]);
+
 	// basically a tokenize step.
 	obj *prg = compile(prg_text);
-	printf("printing program parsed");
+	free(prg_text);
 	printObject(prg);
 
+	printf("printing program parsed");
+
 	ctx *c = createContext();
+
 	int statuscode = exec(c, prg);
 	if (statuscode != 0) {
 		printf("failed to execute");
 	}
 
+	release(prg);
+
 	printf("Stack context at end: \n");
 	printObject(c->stack);
+
+	// freeContext(c);
 
 	return 0;
 }

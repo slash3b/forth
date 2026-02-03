@@ -10,9 +10,18 @@ format:
 	clang-format -i $(SOURCES)
 
 toyforth: main.c
-	# build with warnings and optimization livel 2
+	# build with warnings and optimization level 2
 	gcc -Wall -W -O2 main.c -o toyforth
 
+# debug build with symbols for valgrind/gdb
+debug: main.c
+	gcc -Wall -W -g -O0 main.c -o toyforth
+
+# run valgrind memory leak check (requires debug build)
+.PHONY: valgrind
+valgrind: debug
+	valgrind --leak-check=full --show-leak-kinds=all ./toyforth nums.ft
+
 clean:
-	rm toyforth
+	rm -f toyforth
 
