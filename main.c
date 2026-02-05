@@ -320,6 +320,7 @@ obj *compile(char *prg) {
 			release(parsed);
 			printf("unexpected token %10s ...\n", token_start);
 
+            free(par);
 			return NULL;
 		} else {
 			listPush(parsed, o);
@@ -489,12 +490,25 @@ int basicMathFunction(ctx *c, char *name) {
 		result = a->i * b->i;
 		break;
 	case '/':
+        if (b->i) == 0 {
+            fprintf(stderr, "division by zero\n");
+            return 1;
+        }
+
 		result = a->i / b->i;
 		break;
 	case '%':
+        if (b->i) == 0 {
+            fprintf(stderr, "division by zero\n");
+            return 1;
+        }
+
 		result = a->i % b->i;
 		break;
 	}
+
+    release(a);
+    release(b);
 
 	stackPush(c, makeint(result));
 
@@ -511,6 +525,7 @@ int duplicate(ctx *c, char *unused) {
 
 	obj *o2 = c->stack->list.elements[c->stack->list.len - 1];
 
+    retain(o2);
 	stackPush(c, o2);
 	return 0;
 }
